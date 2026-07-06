@@ -28,7 +28,7 @@ use datafusion::{
         listing::PartitionedFile,
         object_store::ObjectStoreUrl,
         physical_plan::{
-            CsvSource, FileSource, FileStreamBuilder, JsonOpener, JsonSource,
+            CsvSource, FileSourceArgs, FileStreamBuilder, JsonOpener, JsonSource,
         },
     },
     error::Result,
@@ -66,20 +66,17 @@ async fn csv_opener() -> Result<()> {
 
     let source = CsvSource::new(Arc::clone(&schema))
         .with_csv_options(options)
-        .with_comment(Some(b'#'))
-        .with_batch_size(8192);
+        .with_comment(Some(b'#'));
 
     let scan_config =
-        FileScanConfigBuilder::new(ObjectStoreUrl::local_filesystem(), source)
+        FileScanConfigBuilder::new(ObjectStoreUrl::local_filesystem(), source.into())
             .with_projection_indices(Some(vec![0, 1]))?
             .with_limit(Some(5))
             .with_file(PartitionedFile::new(csv_path.display().to_string(), 10))
             .build();
 
-    let opener =
-        scan_config
-            .file_source()
-            .create_file_opener(object_store, &scan_config, 0)?;
+    let args = FileSourceArgs::new(object_store).with_batch_size(8192);
+    let opener = scan_config.file_source().create_file_opener(&args, 0)?;
 
     let mut result = vec![];
     let metrics = ExecutionPlanMetricsSet::new();
