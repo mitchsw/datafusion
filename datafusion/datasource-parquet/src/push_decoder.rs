@@ -119,6 +119,10 @@ pub(crate) struct PushDecoderStreamState {
     pub(crate) arrow_reader_metrics: ArrowReaderMetrics,
     pub(crate) predicate_cache_inner_records: Gauge,
     pub(crate) predicate_cache_records: Gauge,
+    /// Last absolute values copied from `arrow_reader_metrics`, so we can add
+    /// per-poll deltas (the gauges may be shared across the partition's files).
+    pub(crate) predicate_cache_inner_last: usize,
+    pub(crate) predicate_cache_records_last: usize,
     pub(crate) baseline_metrics: BaselineMetrics,
 }
 
@@ -180,8 +184,10 @@ impl PushDecoderStreamState {
                     } else {
                         batch
                     };
-                    let mut timer = self.baseline_metrics.elapsed_compute().timer();
+                    // Before the timer borrows `baseline_metrics` (copy needs
+                    // `&mut self`); the copy is a couple of atomic ops.
                     self.copy_arrow_reader_metrics();
+                    let mut timer = self.baseline_metrics.elapsed_compute().timer();
                     let result = self.project_batch(&batch);
                     timer.stop();
                     // Release the borrow on baseline_metrics before moving self
@@ -204,14 +210,20 @@ impl PushDecoderStreamState {
         }
     }
 
-    /// Copies metrics from ArrowReaderMetrics (the metrics collected by the
-    /// arrow-rs parquet reader) to the parquet file metrics for DataFusion
-    fn copy_arrow_reader_metrics(&self) {
+    /// Copies metrics from arrow-rs to the DataFusion parquet metrics.
+    ///
+    /// Adds the delta since the last copy (arrow-rs reports cumulative
+    /// absolutes) so a gauge shared across the partition's files sums correctly.
+    fn copy_arrow_reader_metrics(&mut self) {
         if let Some(v) = self.arrow_reader_metrics.records_read_from_inner() {
-            self.predicate_cache_inner_records.set(v);
+            self.predicate_cache_inner_records
+                .add(v.saturating_sub(self.predicate_cache_inner_last));
+            self.predicate_cache_inner_last = v;
         }
         if let Some(v) = self.arrow_reader_metrics.records_read_from_cache() {
-            self.predicate_cache_records.set(v);
+            self.predicate_cache_records
+                .add(v.saturating_sub(self.predicate_cache_records_last));
+            self.predicate_cache_records_last = v;
         }
     }
 

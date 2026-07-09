@@ -66,6 +66,9 @@ pub struct FileSourceArgs {
     pub file_compression_type: FileCompressionType,
     /// Adapter factory for rewriting expressions to the physical file schema.
     pub expr_adapter_factory: Option<Arc<dyn PhysicalExprAdapterFactory>>,
+    /// Register per-file metrics (with a `filename` label) instead of
+    /// per-partition. See `datafusion.explain.per_file_metrics`.
+    pub per_file_metrics: bool,
 }
 
 impl FileSourceArgs {
@@ -77,6 +80,7 @@ impl FileSourceArgs {
             preserve_order: false,
             file_compression_type: FileCompressionType::UNCOMPRESSED,
             expr_adapter_factory: None,
+            per_file_metrics: false,
         }
     }
 
@@ -108,6 +112,11 @@ impl FileSourceArgs {
         expr_adapter_factory: Option<Arc<dyn PhysicalExprAdapterFactory>>,
     ) -> Self {
         self.expr_adapter_factory = expr_adapter_factory;
+        self
+    }
+
+    pub fn with_per_file_metrics(mut self, per_file_metrics: bool) -> Self {
+        self.per_file_metrics = per_file_metrics;
         self
     }
 }

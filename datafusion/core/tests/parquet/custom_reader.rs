@@ -29,7 +29,6 @@ use datafusion::datasource::physical_plan::{
     ParquetFileMetrics, ParquetFileReaderFactory, ParquetSource,
 };
 use datafusion::physical_plan::collect;
-use datafusion::physical_plan::metrics::ExecutionPlanMetricsSet;
 use datafusion::prelude::SessionContext;
 use datafusion_common::Result;
 use datafusion_common::test_util::batches_to_sort_string;
@@ -191,10 +190,10 @@ struct InMemoryParquetFileReaderFactory(Arc<dyn ObjectStore>);
 impl ParquetFileReaderFactory for InMemoryParquetFileReaderFactory {
     fn create_reader(
         &self,
-        partition_index: usize,
+        _partition_index: usize,
         partitioned_file: PartitionedFile,
         metadata_size_hint: Option<usize>,
-        metrics: &ExecutionPlanMetricsSet,
+        file_metrics: ParquetFileMetrics,
     ) -> Result<Box<dyn AsyncFileReader + Send>> {
         let metadata = partitioned_file
             .extension::<String>()
@@ -202,16 +201,10 @@ impl ParquetFileReaderFactory for InMemoryParquetFileReaderFactory {
 
         assert_eq!(EXPECTED_USER_DEFINED_METADATA, &metadata[..]);
 
-        let parquet_file_metrics = ParquetFileMetrics::new(
-            partition_index,
-            partitioned_file.object_meta.location.as_ref(),
-            metrics,
-        );
-
         Ok(Box::new(ParquetFileReader {
             store: Arc::clone(&self.0),
             meta: partitioned_file.object_meta,
-            metrics: parquet_file_metrics,
+            metrics: file_metrics,
             metadata_size_hint,
         }))
     }

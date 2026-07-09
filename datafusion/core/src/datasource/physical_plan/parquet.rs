@@ -57,16 +57,15 @@ mod tests {
     use datafusion_datasource::{PartitionedFile, TableSchema};
     use datafusion_datasource_parquet::source::ParquetSource;
     use datafusion_datasource_parquet::{
-        DefaultParquetFileReaderFactory, ParquetFileReaderFactory, ParquetFormat,
+        DefaultParquetFileReaderFactory, ParquetFileMetrics, ParquetFileReaderFactory,
+        ParquetFormat,
     };
     use datafusion_execution::object_store::ObjectStoreUrl;
     use datafusion_expr::{Expr, col, lit, when};
     use datafusion_physical_expr::planner::logical2physical;
     use datafusion_physical_plan::analyze::AnalyzeExec;
     use datafusion_physical_plan::collect;
-    use datafusion_physical_plan::metrics::{
-        ExecutionPlanMetricsSet, MetricType, MetricValue, MetricsSet,
-    };
+    use datafusion_physical_plan::metrics::{MetricType, MetricValue, MetricsSet};
     use datafusion_physical_plan::{ExecutionPlan, ExecutionPlanProperties};
 
     use chrono::{TimeZone, Utc};
@@ -2453,7 +2452,7 @@ mod tests {
             partition_index: usize,
             partitioned_file: PartitionedFile,
             metadata_size_hint: Option<usize>,
-            metrics: &ExecutionPlanMetricsSet,
+            file_metrics: ParquetFileMetrics,
         ) -> Result<Box<dyn parquet::arrow::async_reader::AsyncFileReader + Send>>
         {
             self.metadata_size_hint_calls
@@ -2464,7 +2463,7 @@ mod tests {
                 partition_index,
                 partitioned_file,
                 metadata_size_hint,
-                metrics,
+                file_metrics,
             )
         }
     }

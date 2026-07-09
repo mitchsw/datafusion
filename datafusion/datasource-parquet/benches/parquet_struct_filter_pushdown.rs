@@ -206,7 +206,8 @@ fn scan(
     let file_schema = builder.schema();
 
     let metrics = ExecutionPlanMetricsSet::new();
-    let file_metrics = ParquetFileMetrics::new(0, &path.display().to_string(), &metrics);
+    let file_metrics =
+        ParquetFileMetrics::new(0, &path.display().to_string(), &metrics, false);
 
     let mut filter_applied = false;
     let builder = if pushdown {

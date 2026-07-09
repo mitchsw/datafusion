@@ -1344,6 +1344,13 @@ config_namespace! {
         /// Use "none" to show plan structure only, or "all" (default) to show everything.
         /// Metrics without a declared category are treated as "uncategorized".
         pub analyze_categories: ExplainAnalyzeCategories, default = ExplainAnalyzeCategories::All
+
+        /// Register scan metrics per file (tagged with a `filename` label)
+        /// instead of per partition. Per-file metrics are only shown by
+        /// `EXPLAIN ANALYZE VERBOSE` but cost significant lock contention on
+        /// large scans, so `AnalyzeExec` enables this only for that case; it is
+        /// not normally set by users.
+        pub per_file_metrics: bool, default = false
     }
 }
 

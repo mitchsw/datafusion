@@ -1433,7 +1433,7 @@ mod test {
 
         let metrics = ExecutionPlanMetricsSet::new();
         let file_metrics =
-            ParquetFileMetrics::new(0, &format!("{func_name}.parquet"), &metrics);
+            ParquetFileMetrics::new(0, &format!("{func_name}.parquet"), &metrics, false);
 
         let row_filter =
             build_row_filter(&expr, &file_schema, &metadata, false, &file_metrics)
@@ -2011,7 +2011,8 @@ mod test {
         let expr = logical2physical(&predicate_expr, &file_schema);
 
         let metrics = ExecutionPlanMetricsSet::new();
-        let file_metrics = ParquetFileMetrics::new(0, "struct_e2e.parquet", &metrics);
+        let file_metrics =
+            ParquetFileMetrics::new(0, "struct_e2e.parquet", &metrics, false);
 
         let row_filter =
             build_row_filter(&expr, &file_schema, &metadata, false, &file_metrics)

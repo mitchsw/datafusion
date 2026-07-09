@@ -48,7 +48,7 @@ use std::{collections::HashMap, sync::Arc};
 ///
 /// [`SessionContext`]: https://docs.rs/datafusion/latest/datafusion/execution/context/struct.SessionContext.html
 /// [`ExecutionProps`]: datafusion_expr::execution_props::ExecutionProps
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TaskContext {
     /// Session Id
     session_id: String,

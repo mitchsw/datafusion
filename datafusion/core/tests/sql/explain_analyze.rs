@@ -1044,6 +1044,9 @@ async fn parquet_explain_analyze_verbose() {
     // should contain the raw per file stats (with the label)
     assert_contains!(&formatted, "row_groups_pruned_bloom_filter{partition=0");
     assert_contains!(&formatted, "row_groups_pruned_statistics{partition=0");
+    // EXPLAIN ANALYZE VERBOSE opts into per-file metrics, so the "Plan with
+    // Full Metrics" block must carry the per-file `filename` label.
+    assert_contains!(&formatted, "filename=");
 }
 
 #[tokio::test]

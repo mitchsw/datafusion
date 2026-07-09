@@ -1369,7 +1369,7 @@ mod tests {
 
     fn parquet_file_metrics() -> ParquetFileMetrics {
         let metrics = Arc::new(ExecutionPlanMetricsSet::new());
-        ParquetFileMetrics::new(0, "file.parquet", &metrics)
+        ParquetFileMetrics::new(0, "file.parquet", &metrics, false)
     }
 
     fn assert_pruned(row_groups: RowGroupAccessPlanFilter, expected: ExpectedPruning) {

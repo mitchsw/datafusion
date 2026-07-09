@@ -32,7 +32,7 @@ use datafusion::datasource::TableProvider;
 use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::physical_plan::parquet::ParquetAccessPlan;
 use datafusion::datasource::physical_plan::{
-    FileScanConfigBuilder, ParquetFileReaderFactory, ParquetSource,
+    FileScanConfigBuilder, ParquetFileMetrics, ParquetFileReaderFactory, ParquetSource,
 };
 use datafusion::execution::object_store::ObjectStoreUrl;
 use datafusion::logical_expr::utils::conjunction;
@@ -49,7 +49,6 @@ use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::utils::{Guarantee, LiteralGuarantee};
 use datafusion::physical_optimizer::pruning::PruningPredicate;
 use datafusion::physical_plan::ExecutionPlan;
-use datafusion::physical_plan::metrics::ExecutionPlanMetricsSet;
 use datafusion::prelude::*;
 
 use arrow::array::{ArrayRef, Int32Array, RecordBatch, StringArray};
@@ -553,7 +552,7 @@ impl ParquetFileReaderFactory for CachedParquetFileReaderFactory {
         _partition_index: usize,
         partitioned_file: PartitionedFile,
         metadata_size_hint: Option<usize>,
-        _metrics: &ExecutionPlanMetricsSet,
+        _file_metrics: ParquetFileMetrics,
     ) -> Result<Box<dyn AsyncFileReader + Send>> {
         // for this example we ignore the partition index and metrics
         // but in a real system you would likely use them to report details on

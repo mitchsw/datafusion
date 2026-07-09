@@ -21,6 +21,7 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 use crate::DefaultParquetFileReaderFactory;
+use crate::ParquetFileMetrics;
 use crate::ParquetFileReaderFactory;
 use crate::opener::ParquetMorselizer;
 use crate::opener::build_pruning_predicates;
@@ -579,6 +580,10 @@ impl FileSource for ParquetSource {
             );
         }
 
+        // In per-partition mode, build the shared set once per partition.
+        let partition_file_metrics = (!args.per_file_metrics)
+            .then(|| ParquetFileMetrics::new(partition, "", self.metrics(), false));
+
         Ok(Box::new(ParquetMorselizer {
             partition_index: partition,
             projection: self.projection.clone(),
@@ -606,6 +611,7 @@ impl FileSource for ParquetSource {
             max_predicate_cache_size: self.max_predicate_cache_size(),
             reverse_row_groups: self.reverse_row_groups,
             sort_order_for_reorder: self.sort_order_for_reorder.clone(),
+            partition_file_metrics,
         }))
     }
 

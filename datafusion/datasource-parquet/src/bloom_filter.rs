@@ -491,7 +491,7 @@ mod tests {
 
         let metrics = ExecutionPlanMetricsSet::new();
         let file_metrics =
-            ParquetFileMetrics::new(0, object_meta.location.as_ref(), &metrics);
+            ParquetFileMetrics::new(0, object_meta.location.as_ref(), &metrics, false);
         let inner =
             ParquetObjectReader::new(Arc::new(in_memory), object_meta.location.clone())
                 .with_file_size(object_meta.size);
@@ -502,6 +502,7 @@ mod tests {
             inner,
             file_metrics: file_metrics.clone(),
             partitioned_file,
+            bytes_scanned: 0,
         };
         let mut builder = ParquetRecordBatchStreamBuilder::new(reader).await.unwrap();
 

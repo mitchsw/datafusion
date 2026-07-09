@@ -141,6 +141,10 @@ pub(super) struct ParquetMorselizer {
     pub reverse_row_groups: bool,
     /// Optional sort order used to reorder row groups by their min/max statistics.
     pub sort_order_for_reorder: Option<LexOrdering>,
+    /// Shared per-partition metrics, cloned per file. `None` selects per-file
+    /// granularity (a `filename`-labelled set built per file). See
+    /// `datafusion.explain.per_file_metrics`.
+    pub(crate) partition_file_metrics: Option<ParquetFileMetrics>,
 }
 
 impl fmt::Debug for ParquetMorselizer {
@@ -267,6 +271,8 @@ struct PreparedParquetOpen {
     extensions: datafusion_datasource::FileExtensions,
     file_name: String,
     file_metrics: ParquetFileMetrics,
+    /// Granularity of `file_metrics`; propagated to metrics recorded mid-scan.
+    per_file_metrics: bool,
     baseline_metrics: BaselineMetrics,
     file_pruner: Option<FilePruner>,
     metadata_size_hint: Option<usize>,
@@ -545,20 +551,29 @@ impl ParquetMorselizer {
         let file_range = partitioned_file.range.clone();
         let extensions = partitioned_file.extensions.clone();
         let file_name = partitioned_file.object_meta.location.to_string();
-        let file_metrics =
-            ParquetFileMetrics::new(self.partition_index, &file_name, &self.metrics);
+        // Reuse the shared per-partition set, or build a labelled one per file.
+        let file_metrics = match &self.partition_file_metrics {
+            Some(shared) => shared.clone(),
+            None => ParquetFileMetrics::new(
+                self.partition_index,
+                &file_name,
+                &self.metrics,
+                true,
+            ),
+        };
         let baseline_metrics = BaselineMetrics::new(&self.metrics, self.partition_index);
 
         let metadata_size_hint = partitioned_file
             .metadata_size_hint
             .or(self.metadata_size_hint);
 
+        // Reuse these handles in the reader rather than registering per file.
         let async_file_reader: Box<dyn AsyncFileReader> =
             self.parquet_file_reader_factory.create_reader(
                 self.partition_index,
                 partitioned_file.clone(),
                 metadata_size_hint,
-                &self.metrics,
+                file_metrics.clone(),
             )?;
 
         // Calculate the output schema from the original projection (before literal replacement)
@@ -638,6 +653,7 @@ impl ParquetMorselizer {
             extensions,
             file_name,
             file_metrics,
+            per_file_metrics: self.partition_file_metrics.is_none(),
             baseline_metrics,
             file_pruner,
             metadata_size_hint,
@@ -977,7 +993,7 @@ impl RowGroupsPrunedParquetOpen {
                     prepared.partition_index,
                     prepared.partitioned_file.clone(),
                     prepared.metadata_size_hint,
-                    &prepared.metrics,
+                    prepared.file_metrics.clone(),
                 )?
             };
 
@@ -1117,6 +1133,7 @@ impl RowGroupsPrunedParquetOpen {
                 prepared.partition_index,
                 &prepared.file_name,
                 page_pruning_result.pages_skipped_by_fully_matched,
+                prepared.per_file_metrics,
             );
         }
 
@@ -1252,6 +1269,8 @@ impl RowGroupsPrunedParquetOpen {
             arrow_reader_metrics,
             predicate_cache_inner_records,
             predicate_cache_records,
+            predicate_cache_inner_last: 0,
+            predicate_cache_records_last: 0,
             baseline_metrics: prepared.baseline_metrics,
         }
         .into_stream();
@@ -1591,6 +1610,14 @@ mod test {
                 ProjectionExprs::from_indices(&all_indices, &file_schema)
             };
 
+            // Build before `self.metrics` is moved into the struct below.
+            let partition_file_metrics = Some(ParquetFileMetrics::new(
+                self.partition_index,
+                "",
+                &self.metrics,
+                false,
+            ));
+
             ParquetMorselizer {
                 partition_index: self.partition_index,
                 projection,
@@ -1623,6 +1650,7 @@ mod test {
                 max_predicate_cache_size: self.max_predicate_cache_size,
                 reverse_row_groups: self.reverse_row_groups,
                 sort_order_for_reorder: None,
+                partition_file_metrics,
             }
         }
     }

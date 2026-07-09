@@ -179,11 +179,21 @@ impl ExecutionPlan for AnalyzeExec {
         let mut builder =
             RecordBatchReceiverStream::builder(self.schema(), num_input_partitions);
 
+        // Only VERBOSE renders per-file metrics, so request them (per-partition
+        // otherwise) via a child context read by the scan at execution time.
+        let input_context = if self.verbose {
+            let mut session_config = context.session_config().clone();
+            session_config.options_mut().explain.per_file_metrics = true;
+            Arc::new(context.as_ref().clone().with_session_config(session_config))
+        } else {
+            Arc::clone(&context)
+        };
+
         for input_partition in 0..num_input_partitions {
             builder.run_input(
                 Arc::clone(&self.input),
                 input_partition,
-                Arc::clone(&context),
+                Arc::clone(&input_context),
             );
         }
 
