@@ -18,7 +18,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use super::{ParquetAccessPlan, ParquetFileMetrics, RowGroupAccess};
+use super::{ParquetAccessPlan, ParquetMetricSet, RowGroupAccess};
 use crate::bloom_filter::BloomFilterStatistics;
 use arrow::array::{ArrayRef, BooleanArray, UInt64Array};
 use arrow::datatypes::Schema;
@@ -179,7 +179,7 @@ impl RowGroupAccessPlanFilter {
         &mut self,
         limit: usize,
         rg_metadata: &[RowGroupMetaData],
-        metrics: &ParquetFileMetrics,
+        metrics: &ParquetMetricSet,
     ) {
         let mut fully_matched_row_group_indexes: Vec<usize> = Vec::new();
         let mut fully_matched_rows_count: usize = 0;
@@ -263,7 +263,7 @@ impl RowGroupAccessPlanFilter {
         parquet_schema: &SchemaDescriptor,
         groups: &[RowGroupMetaData],
         predicate: &PruningPredicate,
-        metrics: &ParquetFileMetrics,
+        metrics: &ParquetMetricSet,
     ) {
         // scoped timer updates on drop
         let _timer_guard = metrics.statistics_eval_time.timer();
@@ -334,7 +334,7 @@ impl RowGroupAccessPlanFilter {
         parquet_schema: &SchemaDescriptor,
         groups: &[RowGroupMetaData],
         predicate: &PruningPredicate,
-        metrics: &ParquetFileMetrics,
+        metrics: &ParquetMetricSet,
     ) {
         if candidate_row_group_indices.is_empty() {
             return;
@@ -421,7 +421,7 @@ impl RowGroupAccessPlanFilter {
     pub fn prune_by_bloom_filters(
         &mut self,
         predicate: &PruningPredicate,
-        metrics: &ParquetFileMetrics,
+        metrics: &ParquetMetricSet,
         row_group_bloom_filters: &[BloomFilterStatistics],
     ) {
         // scoped timer updates on drop
@@ -1424,9 +1424,9 @@ mod tests {
         Arc::new(SchemaDescriptor::new(Arc::new(schema)))
     }
 
-    fn parquet_file_metrics() -> ParquetFileMetrics {
+    fn parquet_file_metrics() -> ParquetMetricSet {
         let metrics = Arc::new(ExecutionPlanMetricsSet::new());
-        ParquetFileMetrics::new(0, "file.parquet", &metrics)
+        ParquetMetricSet::new(0, "file.parquet", &metrics)
     }
 
     fn assert_pruned(row_groups: RowGroupAccessPlanFilter, expected: ExpectedPruning) {

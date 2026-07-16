@@ -18,18 +18,20 @@
 use std::sync::Arc;
 
 use datafusion_physical_plan::metrics::{
-    Count, ExecutionPlanMetricsSet, Gauge, Label, MetricBuilder, MetricCategory,
-    MetricType, PruningMetrics, RatioMergeStrategy, RatioMetrics, Time,
+    BaselineMetrics, Count, ExecutionPlanMetricsSet, Gauge, Label, MetricBuilder,
+    MetricCategory, MetricType, PruningMetrics, RatioMergeStrategy, RatioMetrics, Time,
 };
 
-/// Stores metrics about the parquet execution for a particular parquet file.
+/// Stores Parquet metric handles for one selected scope.
 ///
-/// This component is a subject to **change** in near future and is exposed for low level integrations
-/// through [`ParquetFileReaderFactory`].
+/// The set is shared by all files in an execution partition in compact mode,
+/// and dedicated to one file in verbose mode. This component is subject to
+/// change and is exposed for low-level integrations through
+/// [`ParquetFileReaderFactory`].
 ///
 /// [`ParquetFileReaderFactory`]: super::ParquetFileReaderFactory
 #[derive(Debug, Clone)]
-pub struct ParquetFileMetrics {
+pub struct ParquetMetricSet {
     /// Number of file **ranges** pruned or matched by partition or file level statistics.
     /// Pruning of files often happens at planning time but may happen at execution time
     /// if dynamic filters (e.g. from a join) result in additional pruning.
@@ -101,10 +103,17 @@ pub struct ParquetFileMetrics {
     /// number of rows that were stored in the cache after evaluating predicates
     /// reused for the output.
     pub predicate_cache_records: Gauge,
+    /// Number of errors constructing pruning predicates.
+    pub predicate_creation_errors: Count,
+    /// Pages skipped because row-group statistics proved a full match.
+    pub page_index_pages_skipped_by_fully_matched: Count,
+    /// Page-index loads skipped because they could not prune further.
+    pub page_index_load_skipped: Count,
+    baseline_metrics: Arc<BaselineMetrics>,
 }
 
-impl ParquetFileMetrics {
-    /// Create new metrics
+impl ParquetMetricSet {
+    /// Create a filename-labelled metric set for verbose mode.
     pub fn new(
         partition: usize,
         filename: &str,
@@ -113,7 +122,26 @@ impl ParquetFileMetrics {
         // Share the filename label across all per-file metrics to avoid
         // allocating the same filename string for each metric.
         let filename_label = Label::new("filename", Arc::<str>::from(filename));
-        let builder = MetricBuilder::new(metrics).with_label(filename_label);
+        Self::new_for_file(partition, Some(&filename_label), metrics)
+    }
+
+    /// Create metrics shared by all files in an execution partition.
+    pub(crate) fn new_compact(
+        partition: usize,
+        metrics: &ExecutionPlanMetricsSet,
+    ) -> Self {
+        Self::new_for_file(partition, None, metrics)
+    }
+
+    fn new_for_file(
+        partition: usize,
+        filename_label: Option<&Label>,
+        metrics: &ExecutionPlanMetricsSet,
+    ) -> Self {
+        let builder = match filename_label {
+            Some(label) => MetricBuilder::new(metrics).with_label(label.clone()),
+            None => MetricBuilder::new(metrics),
+        };
 
         // -----------------------
         // 'summary' level metrics
@@ -203,13 +231,31 @@ impl ParquetFileMetrics {
             .gauge("predicate_cache_inner_records", partition);
 
         let predicate_cache_records = builder
+            .clone()
             .with_category(MetricCategory::Rows)
             .gauge("predicate_cache_records", partition);
 
-        let row_groups_pruned_dynamic_filter = MetricBuilder::new(metrics)
-            .with_new_label("filename", filename.to_string())
+        let row_groups_pruned_dynamic_filter = builder
+            .clone()
             .with_type(MetricType::Summary)
             .counter("row_groups_pruned_dynamic_filter", partition);
+
+        let predicate_creation_errors = MetricBuilder::new(metrics)
+            .with_category(MetricCategory::Rows)
+            .global_counter("num_predicate_creation_errors");
+
+        let page_index_pages_skipped_by_fully_matched = builder
+            .clone()
+            .with_type(MetricType::Summary)
+            .with_category(MetricCategory::Rows)
+            .counter("page_index_pages_skipped_by_fully_matched", partition);
+
+        let page_index_load_skipped = builder
+            .clone()
+            .with_type(MetricType::Summary)
+            .counter("page_index_load_skipped", partition);
+
+        let baseline_metrics = Arc::new(BaselineMetrics::new(metrics, partition));
 
         Self {
             files_ranges_pruned_statistics,
@@ -231,49 +277,36 @@ impl ParquetFileMetrics {
             predicate_cache_inner_records,
             predicate_cache_records,
             row_groups_pruned_dynamic_filter,
+            predicate_creation_errors,
+            page_index_pages_skipped_by_fully_matched,
+            page_index_load_skipped,
+            baseline_metrics,
         }
     }
 
-    /// Record pages whose page-index pruning was skipped because the containing
-    /// row group was fully matched by row-group statistics.
-    ///
-    /// The counter is only registered when there is a non-zero value. This keeps
-    /// [`ParquetFileMetrics::new`] from cloning the filename and metrics set for
-    /// files that never use this metric.
-    pub(crate) fn add_page_index_pages_skipped_by_fully_matched(
-        metrics: &ExecutionPlanMetricsSet,
-        partition: usize,
-        filename: &str,
-        n: usize,
-    ) {
-        if n == 0 {
-            return;
-        }
-
-        let count = MetricBuilder::new(metrics)
-            .with_new_label("filename", filename.to_string())
-            .with_type(MetricType::Summary)
-            .with_category(MetricCategory::Rows)
-            .counter("page_index_pages_skipped_by_fully_matched", partition);
-        count.add(n);
+    /// Record bytes scanned and update the scan-efficiency numerator.
+    pub fn add_bytes_scanned(&self, bytes: usize) {
+        self.bytes_scanned.add(bytes);
+        self.scan_efficiency_ratio.add_part(bytes);
     }
 
-    /// Record that page index I/O was skipped because row-group statistics
-    /// already proved page index could not prune further.
-    pub(crate) fn add_page_index_load_skipped(
-        metrics: &ExecutionPlanMetricsSet,
-        partition: usize,
-        filename: &str,
-        n: usize,
-    ) {
-        if n == 0 {
-            return;
-        }
+    /// Baseline metrics for decoder compute in this scope.
+    pub(crate) fn baseline_metrics(&self) -> Arc<BaselineMetrics> {
+        Arc::clone(&self.baseline_metrics)
+    }
+}
 
-        let count = MetricBuilder::new(metrics)
-            .with_new_label("filename", filename.to_string())
-            .with_type(MetricType::Summary)
-            .counter("page_index_load_skipped", partition);
-        count.add(n);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bytes_scanned_is_scan_efficiency_numerator() {
+        let metrics = ExecutionPlanMetricsSet::new();
+        let file_metrics = ParquetMetricSet::new(0, "test.parquet", &metrics);
+
+        file_metrics.add_bytes_scanned(42);
+        assert_eq!(file_metrics.bytes_scanned.value(), 42);
+        assert_eq!(file_metrics.scan_efficiency_ratio.part(), 42);
     }
 }
