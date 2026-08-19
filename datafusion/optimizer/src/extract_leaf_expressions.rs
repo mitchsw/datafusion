@@ -1452,8 +1452,9 @@ mod tests {
             TableScan: test projection=[user]
 
         ## Optimized
-        Projection: leaf_udf(test.user, Utf8("name")) IS NOT NULL AS has_name
-          TableScan: test projection=[user]
+        Projection: __datafusion_extracted_1 IS NOT NULL AS has_name
+          Projection: leaf_udf(test.user, Utf8("name")) AS __datafusion_extracted_1
+            TableScan: test projection=[user]
         "#)
     }
 
@@ -2068,9 +2069,10 @@ mod tests {
               TableScan: test projection=[user]
 
         ## Optimized
-        Projection: leaf_udf(test.user, Utf8("name")) IS NOT NULL AS has_name, COUNT(Int32(1))
-          Aggregate: groupBy=[[test.user]], aggr=[[COUNT(Int32(1))]]
-            TableScan: test projection=[user]
+        Projection: __datafusion_extracted_1 IS NOT NULL AS has_name, COUNT(Int32(1))
+          Projection: leaf_udf(test.user, Utf8("name")) AS __datafusion_extracted_1, COUNT(Int32(1))
+            Aggregate: groupBy=[[test.user]], aggr=[[COUNT(Int32(1))]]
+              TableScan: test projection=[user]
         "#)
     }
 

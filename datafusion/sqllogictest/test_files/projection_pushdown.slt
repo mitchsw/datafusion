@@ -186,8 +186,9 @@ query TT
 EXPLAIN SELECT id, s['value'] + 1 FROM simple_struct;
 ----
 logical_plan
-01)Projection: simple_struct.id, get_field(simple_struct.s, Utf8("value")) + Int64(1)
-02)--TableScan: simple_struct projection=[id, s]
+01)Projection: simple_struct.id, __datafusion_extracted_1 + Int64(1) AS simple_struct.s[value] + Int64(1)
+02)--Projection: get_field(simple_struct.s, Utf8("value")) AS __datafusion_extracted_1, simple_struct.id
+03)----TableScan: simple_struct projection=[id, s]
 physical_plan DataSourceExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/projection_pushdown/simple.parquet]]}, projection=[id, get_field(s@1, value) + 1 as simple_struct.s[value] + Int64(1)], file_type=parquet
 
 # Verify correctness
@@ -208,8 +209,9 @@ query TT
 EXPLAIN SELECT id, s['label'] || '_suffix' FROM simple_struct;
 ----
 logical_plan
-01)Projection: simple_struct.id, get_field(simple_struct.s, Utf8("label")) || Utf8("_suffix")
-02)--TableScan: simple_struct projection=[id, s]
+01)Projection: simple_struct.id, __datafusion_extracted_1 || Utf8("_suffix") AS simple_struct.s[label] || Utf8("_suffix")
+02)--Projection: get_field(simple_struct.s, Utf8("label")) AS __datafusion_extracted_1, simple_struct.id
+03)----TableScan: simple_struct projection=[id, s]
 physical_plan DataSourceExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/projection_pushdown/simple.parquet]]}, projection=[id, get_field(s@1, label) || _suffix as simple_struct.s[label] || Utf8("_suffix")], file_type=parquet
 
 # Verify correctness
@@ -341,8 +343,9 @@ EXPLAIN SELECT id, s['value'] + 1 FROM simple_struct ORDER BY id;
 ----
 logical_plan
 01)Sort: simple_struct.id ASC NULLS LAST
-02)--Projection: simple_struct.id, get_field(simple_struct.s, Utf8("value")) + Int64(1)
-03)----TableScan: simple_struct projection=[id, s]
+02)--Projection: simple_struct.id, __datafusion_extracted_1 + Int64(1) AS simple_struct.s[value] + Int64(1)
+03)----Projection: get_field(simple_struct.s, Utf8("value")) AS __datafusion_extracted_1, simple_struct.id
+04)------TableScan: simple_struct projection=[id, s]
 physical_plan
 01)SortExec: expr=[id@0 ASC NULLS LAST], preserve_partitioning=[false]
 02)--DataSourceExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/projection_pushdown/simple.parquet]]}, projection=[id, get_field(s@1, value) + 1 as simple_struct.s[value] + Int64(1)], file_type=parquet, sort_order_for_reorder=[id@0 ASC NULLS LAST]
@@ -464,8 +467,9 @@ EXPLAIN SELECT id, s['value'] + 1 FROM simple_struct ORDER BY id LIMIT 3;
 ----
 logical_plan
 01)Sort: simple_struct.id ASC NULLS LAST, fetch=3
-02)--Projection: simple_struct.id, get_field(simple_struct.s, Utf8("value")) + Int64(1)
-03)----TableScan: simple_struct projection=[id, s]
+02)--Projection: simple_struct.id, __datafusion_extracted_1 + Int64(1) AS simple_struct.s[value] + Int64(1)
+03)----Projection: get_field(simple_struct.s, Utf8("value")) AS __datafusion_extracted_1, simple_struct.id
+04)------TableScan: simple_struct projection=[id, s]
 physical_plan
 01)SortExec: TopK(fetch=3), expr=[id@0 ASC NULLS LAST], preserve_partitioning=[false]
 02)--DataSourceExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/projection_pushdown/simple.parquet]]}, projection=[id, get_field(s@1, value) + 1 as simple_struct.s[value] + Int64(1)], file_type=parquet, predicate=DynamicFilter [ empty ], sort_order_for_reorder=[id@0 ASC NULLS LAST], dynamic_rg_pruning=eligible
@@ -532,8 +536,9 @@ EXPLAIN SELECT id, s['label'] || '_suffix' FROM simple_struct ORDER BY id LIMIT 
 ----
 logical_plan
 01)Sort: simple_struct.id ASC NULLS LAST, fetch=3
-02)--Projection: simple_struct.id, get_field(simple_struct.s, Utf8("label")) || Utf8("_suffix")
-03)----TableScan: simple_struct projection=[id, s]
+02)--Projection: simple_struct.id, __datafusion_extracted_1 || Utf8("_suffix") AS simple_struct.s[label] || Utf8("_suffix")
+03)----Projection: get_field(simple_struct.s, Utf8("label")) AS __datafusion_extracted_1, simple_struct.id
+04)------TableScan: simple_struct projection=[id, s]
 physical_plan
 01)SortExec: TopK(fetch=3), expr=[id@0 ASC NULLS LAST], preserve_partitioning=[false]
 02)--DataSourceExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/projection_pushdown/simple.parquet]]}, projection=[id, get_field(s@1, label) || _suffix as simple_struct.s[label] || Utf8("_suffix")], file_type=parquet, predicate=DynamicFilter [ empty ], sort_order_for_reorder=[id@0 ASC NULLS LAST], dynamic_rg_pruning=eligible
@@ -733,8 +738,9 @@ EXPLAIN SELECT id, s['value'] + 1 FROM multi_struct ORDER BY id LIMIT 3;
 ----
 logical_plan
 01)Sort: multi_struct.id ASC NULLS LAST, fetch=3
-02)--Projection: multi_struct.id, get_field(multi_struct.s, Utf8("value")) + Int64(1)
-03)----TableScan: multi_struct projection=[id, s]
+02)--Projection: multi_struct.id, __datafusion_extracted_1 + Int64(1) AS multi_struct.s[value] + Int64(1)
+03)----Projection: get_field(multi_struct.s, Utf8("value")) AS __datafusion_extracted_1, multi_struct.id
+04)------TableScan: multi_struct projection=[id, s]
 physical_plan
 01)SortPreservingMergeExec: [id@0 ASC NULLS LAST], fetch=3
 02)--SortExec: TopK(fetch=3), expr=[id@0 ASC NULLS LAST], preserve_partitioning=[true]
@@ -871,8 +877,9 @@ EXPLAIN SELECT id, s['value'], s['value'] + 10, s['label'] FROM simple_struct OR
 ----
 logical_plan
 01)Sort: simple_struct.id ASC NULLS LAST, fetch=3
-02)--Projection: simple_struct.id, get_field(simple_struct.s, Utf8("value")), get_field(simple_struct.s, Utf8("value")) + Int64(10), get_field(simple_struct.s, Utf8("label"))
-03)----TableScan: simple_struct projection=[id, s]
+02)--Projection: simple_struct.id, __datafusion_extracted_1 AS simple_struct.s[value], __datafusion_extracted_1 + Int64(10) AS simple_struct.s[value] + Int64(10), __datafusion_extracted_2 AS simple_struct.s[label]
+03)----Projection: get_field(simple_struct.s, Utf8("value")) AS __datafusion_extracted_1, get_field(simple_struct.s, Utf8("label")) AS __datafusion_extracted_2, simple_struct.id
+04)------TableScan: simple_struct projection=[id, s]
 physical_plan
 01)SortExec: TopK(fetch=3), expr=[id@0 ASC NULLS LAST], preserve_partitioning=[false]
 02)--DataSourceExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/projection_pushdown/simple.parquet]]}, projection=[id, get_field(s@1, value) as simple_struct.s[value], get_field(s@1, value) + 10 as simple_struct.s[value] + Int64(10), get_field(s@1, label) as simple_struct.s[label]], file_type=parquet, predicate=DynamicFilter [ empty ], sort_order_for_reorder=[id@0 ASC NULLS LAST], dynamic_rg_pruning=eligible
@@ -1036,8 +1043,9 @@ EXPLAIN SELECT id, s['value'] + id as combined FROM simple_struct ORDER BY id LI
 ----
 logical_plan
 01)Sort: simple_struct.id ASC NULLS LAST, fetch=3
-02)--Projection: simple_struct.id, get_field(simple_struct.s, Utf8("value")) + simple_struct.id AS combined
-03)----TableScan: simple_struct projection=[id, s]
+02)--Projection: simple_struct.id, __datafusion_extracted_1 + simple_struct.id AS combined
+03)----Projection: get_field(simple_struct.s, Utf8("value")) AS __datafusion_extracted_1, simple_struct.id
+04)------TableScan: simple_struct projection=[id, s]
 physical_plan
 01)SortExec: TopK(fetch=3), expr=[id@0 ASC NULLS LAST], preserve_partitioning=[false]
 02)--DataSourceExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/projection_pushdown/simple.parquet]]}, projection=[id, get_field(s@1, value) + id@0 as combined], file_type=parquet, predicate=DynamicFilter [ empty ], sort_order_for_reorder=[id@0 ASC NULLS LAST], dynamic_rg_pruning=eligible
@@ -1115,8 +1123,9 @@ EXPLAIN SELECT id, s['value'] + 100, s['label'] || '_test' FROM simple_struct OR
 ----
 logical_plan
 01)Sort: simple_struct.id ASC NULLS LAST, fetch=2
-02)--Projection: simple_struct.id, get_field(simple_struct.s, Utf8("value")) + Int64(100), get_field(simple_struct.s, Utf8("label")) || Utf8("_test")
-03)----TableScan: simple_struct projection=[id, s]
+02)--Projection: simple_struct.id, __datafusion_extracted_1 + Int64(100) AS simple_struct.s[value] + Int64(100), __datafusion_extracted_2 || Utf8("_test") AS simple_struct.s[label] || Utf8("_test")
+03)----Projection: get_field(simple_struct.s, Utf8("value")) AS __datafusion_extracted_1, get_field(simple_struct.s, Utf8("label")) AS __datafusion_extracted_2, simple_struct.id
+04)------TableScan: simple_struct projection=[id, s]
 physical_plan
 01)SortExec: TopK(fetch=2), expr=[id@0 ASC NULLS LAST], preserve_partitioning=[false]
 02)--DataSourceExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/projection_pushdown/simple.parquet]]}, projection=[id, get_field(s@1, value) + 100 as simple_struct.s[value] + Int64(100), get_field(s@1, label) || _test as simple_struct.s[label] || Utf8("_test")], file_type=parquet, predicate=DynamicFilter [ empty ], sort_order_for_reorder=[id@0 ASC NULLS LAST], dynamic_rg_pruning=eligible
@@ -1857,9 +1866,10 @@ EXPLAIN SELECT s['label'] IS NOT NULL AS has_label, COUNT(1)
 FROM simple_struct GROUP BY s;
 ----
 logical_plan
-01)Projection: get_field(simple_struct.s, Utf8("label")) IS NOT NULL AS has_label, count(Int64(1))
-02)--Aggregate: groupBy=[[simple_struct.s]], aggr=[[count(Int64(1))]]
-03)----TableScan: simple_struct projection=[s]
+01)Projection: __datafusion_extracted_1 IS NOT NULL AS has_label, count(Int64(1))
+02)--Projection: get_field(simple_struct.s, Utf8("label")) AS __datafusion_extracted_1, count(Int64(1))
+03)----Aggregate: groupBy=[[simple_struct.s]], aggr=[[count(Int64(1))]]
+04)------TableScan: simple_struct projection=[s]
 physical_plan
 01)ProjectionExec: expr=[get_field(s@0, label) IS NOT NULL as has_label, count(Int64(1))@1 as count(Int64(1))]
 02)--AggregateExec: mode=Single, gby=[s@0 as s], aggr=[count(Int64(1))]

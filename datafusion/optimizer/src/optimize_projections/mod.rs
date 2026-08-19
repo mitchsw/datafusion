@@ -29,8 +29,8 @@ use datafusion_common::{
 };
 use datafusion_expr::expr::Alias;
 use datafusion_expr::{
-    Aggregate, Distinct, EmptyRelation, Expr, Projection, TableScanBuilder, Unnest,
-    Window, logical_plan::LogicalPlan,
+    Aggregate, Distinct, EmptyRelation, Expr, ExpressionPlacement, Projection,
+    TableScanBuilder, Unnest, Window, logical_plan::LogicalPlan,
 };
 
 use crate::optimize_projections::required_indices::RequiredIndices;
@@ -580,6 +580,22 @@ fn merge_consecutive_projections_one_level(
             && !prev_projection.expr[prev_projection.schema.index_of_column(col).unwrap()]
                 .placement()
                 .should_push_to_leaves()
+    }) {
+        // no change
+        return Projection::try_new_with_schema(expr, input, schema).map(Transformed::no);
+    }
+
+    // Do not inline a `MoveTowardsLeafNodes` expression into a `KeepInPlace`
+    // consumer: that undoes the split `PushDownLeafProjections` creates so the
+    // leaf-pushable part can reach the data source.
+    if expr.iter().any(|current| {
+        current.placement() == ExpressionPlacement::KeepInPlace
+            && current.column_refs().iter().any(|col| {
+                prev_projection.expr
+                    [prev_projection.schema.index_of_column(col).unwrap()]
+                .placement()
+                    == ExpressionPlacement::MoveTowardsLeafNodes
+            })
     }) {
         // no change
         return Projection::try_new_with_schema(expr, input, schema).map(Transformed::no);
@@ -1238,6 +1254,74 @@ mod tests {
             plan,
             @r"
         Projection: test.a AS alias
+          TableScan: test projection=[a]
+        "
+        )
+    }
+
+    fn placement_udf(
+        placement: datafusion_expr::ExpressionPlacement,
+        args: Vec<Expr>,
+    ) -> Expr {
+        Expr::ScalarFunction(expr::ScalarFunction::new_udf(
+            Arc::new(datafusion_expr::ScalarUDF::new_from_impl(
+                crate::test::udfs::PlacementTestUDF::new().with_placement(placement),
+            )),
+            args,
+        ))
+    }
+
+    /// A `MoveTowardsLeafNodes` expression must not be inlined into a
+    /// `KeepInPlace` consumer: that undoes the split created by
+    /// `PushDownLeafProjections`.
+    #[test]
+    fn merge_keeps_leaf_pushable_expression_split_from_consumer() -> Result<()> {
+        let table_scan = test_table_scan()?;
+        let leaf = placement_udf(
+            datafusion_expr::ExpressionPlacement::MoveTowardsLeafNodes,
+            vec![col("a")],
+        );
+        let consumer = placement_udf(
+            datafusion_expr::ExpressionPlacement::KeepInPlace,
+            vec![col("extracted")],
+        );
+        let plan = LogicalPlanBuilder::from(table_scan)
+            .project(vec![leaf.alias("extracted")])?
+            .project(vec![consumer])?
+            .build()?;
+
+        assert_optimized_plan_equal!(
+            plan,
+            @r"
+        Projection: keep_in_place_udf(extracted)
+          Projection: leaf_udf(test.a) AS extracted
+            TableScan: test projection=[a]
+        "
+        )
+    }
+
+    /// A `MoveTowardsLeafNodes` consumer may be merged: the composition is
+    /// still leaf-pushable.
+    #[test]
+    fn merge_inlines_leaf_pushable_into_leaf_pushable_consumer() -> Result<()> {
+        let table_scan = test_table_scan()?;
+        let inner = placement_udf(
+            datafusion_expr::ExpressionPlacement::MoveTowardsLeafNodes,
+            vec![col("a")],
+        );
+        let outer = placement_udf(
+            datafusion_expr::ExpressionPlacement::MoveTowardsLeafNodes,
+            vec![col("extracted")],
+        );
+        let plan = LogicalPlanBuilder::from(table_scan)
+            .project(vec![inner.alias("extracted")])?
+            .project(vec![outer])?
+            .build()?;
+
+        assert_optimized_plan_equal!(
+            plan,
+            @r"
+        Projection: leaf_udf(leaf_udf(test.a)) AS leaf_udf(extracted)
           TableScan: test projection=[a]
         "
         )
